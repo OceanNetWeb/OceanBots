@@ -1,0 +1,47 @@
+import asyncio
+import discord
+from discord.ext import commands
+
+# 1. Настройка прав (Intents)
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+
+# 2. Функция-шаблон для создания ботов
+def create_farm_bot(name, activity_text):
+    bot = commands.Bot(command_prefix="!", intents=intents)
+
+    @bot.event
+    async def on_ready():
+        await bot.change_presence(activity=discord.Game(name=activity_text))
+        print(f"[{name}] Бот {bot.user.name} успешно запущен и онлайн!")
+
+    @bot.command()
+    async def status(ctx):
+        """Команда для проверки работы конкретного бота"""
+        await ctx.send(f"🤖 Модуль **{name}** активен. Задержка: {round(bot.latency * 1000)}мс")
+
+    return bot
+
+# 3. Инициализируем каждого бота со своим кастомным статусом
+bot_lima = create_farm_bot("Lima", "Ocean.net • Lima | Doing work 24/7")
+bot_orca = create_farm_bot("Orca", "Ocean.net • Orca | Doing work 24/7")
+bot_reef = create_farm_bot("Reef", "Ocean.net • Reef | Doing work 24/7")
+
+# 4. Главная функция для одновременного старта всех трех процессов
+async def main():
+    LIMA_TOKEN = "MTUyMTgxOTY4MTkwNzAxNTY4MA.GcenWa.GCCAL3jisaa4oi6dGuzc7qK_LnR0uSszYIvpVA"
+    ORCA_TOKEN = "MTUyMTgyNDUyNzE3NTI1ODIxNg.GxjybA.ZKZqHMHvzUMDQvSopqJsEz81Sb2BgjeoYJr1GY"
+    REEF_TOKEN = "MTUyMTgyNDg3MzA1ODQwMjQ2NQ.G6_V0c.BBOsb2OsFGKjQd8yd7hghpIhA6IGv0i91EqCJg"
+
+    await asyncio.gather(
+        bot_lima.start(LIMA_TOKEN),
+        bot_orca.start(ORCA_TOKEN),
+        bot_reef.start(REEF_TOKEN)
+    )
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Система мониторинга остановлена.")
