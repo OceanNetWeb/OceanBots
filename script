@@ -1,0 +1,238 @@
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local CoreGui = game:GetService("CoreGui")
+local LocalPlayer = Players.LocalPlayer
+local UserId = LocalPlayer.UserId
+local Username = LocalPlayer.Name
+
+local requestFunc = (syn and syn.request or http_request or request)
+
+-- === НАСТРОЙКИ ФЕРМ И УВЕДОМЛЕНИЙ ===
+local MY_DISCORD_ID = "794227551761465355"
+local DEFAULT_IMPORTANT_WEBHOOK = "https://discord.com/api/webhooks/1521811318477295676/AZ8fXRXXekvCWZ9KOINc6e03mOLWAC4l32JkzJsp5tk3K3NvsELONxlLEglaHBiVDwnH"
+local EXCLUDED_ITEM = "Lucky Arrow"
+
+local Farms = {
+    {
+        Name = "Lima",
+        ImportantWebhook = "https://discord.com/api/webhooks/1521818628629069867/Isnbx_IKy8mom0LFIaxeeXeeYXmoZMKLvvjdc1WkFxkNeJV7O6b6vIIXf7o9RvcVcS4b",
+        ItemWebhook = "https://discord.com/api/webhooks/1521818628629069867/Isnbx_IKy8mom0LFIaxeeXeeYXmoZMKLvvjdc1WkFxkNeJV7O6b6vIIXf7o9RvcVcS4b",
+        Url = "https://raw.githubusercontent.com/OceanNetWeb/OceanBots/refs/heads/main/Lima.txt"
+    },
+    {
+        Name = "Orca",
+        ImportantWebhook = "https://discord.com/api/webhooks/1521818738805178478/9PJ3HOo4CB8GxBAg8f-ie_n6ROOvZVNDlutEh4sUQDptyTFhkqUuwfRF0wP74MuQHhEz",
+        ItemWebhook = "https://discord.com/api/webhooks/1521818281319731271/Nl_3t7eTzkdU3X5s7wIM5JhcEhWTnT1M1Fi4w4XrO2IzALsBb8tAIov_AOSqlLteRNxx",
+        Url = "https://raw.githubusercontent.com/OceanNetWeb/OceanBots/refs/heads/main/Orca.txt"
+    },
+    {
+        Name = "Reef",
+        ImportantWebhook = "https://discord.com/api/webhooks/1521818790537728222/4TsuUkw47Njr82U1sW5faWB5rRBJiervJSY_QYX8EdFfHN5EZlvPIYlGmEnfvQY1TET1",
+        ItemWebhook = "https://discord.com/api/webhooks/1521818332213284884/5_x60ByJ0a7xSwszmE_t1NHfqB1eNIiNtr6i1EFOZGdmW0z0G-0_Tec1iHAX_02e7Ynf",
+        Url = "https://raw.githubusercontent.com/OceanNetWeb/OceanBots/refs/heads/main/Reef.txt"
+    }
+}
+
+local TARGET_IMPORTANT_WEBHOOK = DEFAULT_IMPORTANT_WEBHOOK
+local TARGET_ITEM_WEBHOOK = DEFAULT_IMPORTANT_WEBHOOK
+local FARM_NAME = "Default / Не найден"
+
+-- === ОПРЕДЕЛЕНИЕ ФЕРМЫ ЧЕРЕЗ GITHUB ===
+local function initFarmDetection()
+    if not requestFunc then return end
+    for _, farm in ipairs(Farms) do
+        local success, res = pcall(function() return requestFunc({ Url = farm.Url, Method = "GET" }) end)
+        if success and res and res.Body then
+            for line in res.Body:gmatch("[^\r\n]+") do
+                local cleanLine = line:gsub("%s+", "")
+                if cleanLine:lower() == Username:lower() then
+                    TARGET_IMPORTANT_WEBHOOK = farm.ImportantWebhook
+                    TARGET_ITEM_WEBHOOK = farm.ItemWebhook
+                    FARM_NAME = farm.Name
+                    return
+                end
+            end
+        end
+    end
+end
+initFarmDetection()
+
+-- === ПОЛУЧЕНИЕ АВАТАРА ===
+local AvatarUrl = "https://cdn.discordapp.com/embed/avatars/4.png"
+local successUrl, resultUrl = pcall(function()
+    local url = "https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=" .. UserId .. "&size=150x150&format=Png&isCircular=false"
+    if requestFunc then
+        local res = requestFunc({ Url = url, Method = "GET" })
+        local data = HttpService:JSONDecode(res.Body)
+        if data and data.data and data.data[1] then return data.data[1].imageUrl end
+    end
+end)
+if successUrl and resultUrl then AvatarUrl = resultUrl end
+
+local alreadySent = false
+local farmFinished = false
+local sentItems = {}
+
+-- === ДИНАМИЧЕСКИЙ ПОДСЧЕТ LUCKY ARROWS ===
+local function countLuckyArrows()
+    local count = 0
+    for _, item in ipairs(LocalPlayer:WaitForChild("Backpack"):GetChildren()) do
+        if item.Name == EXCLUDED_ITEM then count = count + 1 end
+    end
+    if LocalPlayer.Character then
+        for _, item in ipairs(LocalPlayer.Character:GetChildren()) do
+            if item.Name == EXCLUDED_ITEM then count = count + 1 end
+        end
+    end
+    return count
+end
+
+-- === ОТПРАВКА ВЕБХУКОВ ===
+local function sendWebhook(url, statusMessage, titleField, valueField, pingUser)
+    local Content = pingUser and ("<@" .. MY_DISCORD_ID .. ">") or ""
+    local fields = {
+        { name = 'Аккаунт', value = Username, inline = true },
+        { name = 'Ферма', value = FARM_NAME, inline = true },
+        { name = titleField, value = valueField, inline = false }
+    }
+    local Embed = {
+        title = statusMessage,
+        color = 32767,
+        thumbnail = { url = AvatarUrl },
+        fields = fields,
+        timestamp = string.format('%d-%02d-%02dT%02d:%02d:%02dZ', os.date('!*t').year, os.date('!*t').month, os.date('!*t').day, os.date('!*t').hour, os.date('!*t').min, os.date('!*t').sec)
+    }
+    if requestFunc then
+        pcall(function()
+            requestFunc({
+                Url = url,
+                Method = 'POST',
+                Headers = { ['Content-Type'] = 'application/json', ['User-Agent'] = 'Mozilla/5.0' },
+                Body = HttpService:JSONEncode({ username = "Ocean.net (" .. FARM_NAME .. ")", content = Content, embeds = { Embed } })
+            })
+        end)
+    end
+end
+
+-- === ПРОВЕРКА ЛИМИТОВ ДЛЯ ЗАВЕРШЕНИЯ ФАРМА ===
+local function checkFarmLimits()
+    if farmFinished then return end
+    
+    local luckyCount = countLuckyArrows()
+    local moneyValue = 0
+    pcall(function() moneyValue = LocalPlayer:WaitForChild("PlayerStats"):WaitForChild("Money").Value end)
+    
+    -- Условие 1: 10 стрел и >= 75,000 денег ИЛИ Условие 2: 9 стрел и >= 82,500 денег
+    if (luckyCount >= 10 and moneyValue >= 75000) or (luckyCount >= 9 and moneyValue >= 82500) then
+        farmFinished = true
+        sendWebhook(TARGET_IMPORTANT_WEBHOOK, "Фарм успешно завершен! 🎉", "Статус", string.format("Достигнут лимит ресурсов!\nСтрелы: %d\nДеньги: %d", luckyCount, moneyValue), true)
+    end
+end
+
+-- === ЛОГИКА ПОДБОРА ПРЕДМЕТОВ ===
+local function onItemAdded(item)
+    if item:IsA("Tool") then
+        local itemName = item.Name
+        if itemName == "Punch" or itemName == "Block" then return end
+        if sentItems[item] then return end
+        sentItems[item] = true
+        
+        item.Destroying:Connect(function() sentItems[item] = nil end)
+        
+        local isLucky = false
+        if itemName:lower():match("lucky%s+arrow") or itemName == EXCLUDED_ITEM then
+            isLucky = true
+        end
+        
+        sendWebhook(TARGET_ITEM_WEBHOOK, "Получен предмет", "Имя предмета", itemName, isLucky)
+        task.spawn(checkFarmLimits)
+    end
+end
+
+LocalPlayer:WaitForChild("Backpack").ChildAdded:Connect(onItemAdded)
+
+-- === СКРИПТ АВТОПРОДАЖИ И ПОКУПКИ LUCKY ARROW ===
+
+
+local function checkAndBuyLuckyArrow()
+    if farmFinished then return end
+    local moneyValue = 0
+    pcall(function() moneyValue = LocalPlayer:WaitForChild("PlayerStats"):WaitForChild("Money").Value end)
+    
+    if moneyValue >= 75000 and countLuckyArrows() < 10 then
+        local remote = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("RemoteEvent")
+        if remote then
+            remote:FireServer(unpack({ "PurchaseShopItem", { ItemName = "1x Lucky Arrow" } }))
+        end
+    end
+    task.spawn(checkFarmLimits)
+end
+
+local function processItem(item)
+    if farmFinished then return end
+    task.wait(0.1)
+    if item:IsA("Tool") and item.Name ~= EXCLUDED_ITEM then
+        local remote = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("RemoteEvent")
+        if remote then
+            sentItems[item] = true 
+            item.Parent = LocalPlayer.Character
+            remote:FireServer(unpack({
+                "EndDialogue",
+                { Option = "Option1", Dialogue = "Dialogue5", NPC = "Merchant" }
+            }))
+        end
+    end
+end
+
+LocalPlayer:WaitForChild("Backpack").ChildAdded:Connect(processItem)
+for _, item in ipairs(LocalPlayer:WaitForChild("Backpack"):GetChildren()) do
+    task.spawn(processItem, item)
+end
+
+pcall(function()
+    LocalPlayer:WaitForChild("PlayerStats"):WaitForChild("Money").Changed:Connect(checkAndBuyLuckyArrow)
+end)
+task.spawn(checkAndBuyLuckyArrow)
+
+-- === ОТСЛЕЖИВАНИЕ ВЫЛЕТОВ И КИКОВ ===
+local function cleanReason(rawText)
+    if not rawText or rawText == "Label" or rawText == "" then return "Обычный кик / Разрыв соединения" end
+    local clean = rawText:gsub("You have been kicked by this experience or its moderators%.%s*", "")
+    clean = clean:gsub("Moderation message:%s*", "")
+    clean = clean:gsub("%s*%(?Error [Cc]ode:%s*%d+%)?.*", "")
+    clean = clean:gsub("%s*Error [Cc]ode:%s*%d+.*", "")
+    if clean == "" or clean:match("^%s*$") or clean == "Label" then return "Обычный кик / Разрыв соединения" end
+    return clean:match("^%s*(.-)%s*$")
+end
+
+Players.PlayerRemoving:Connect(function(player)
+    if player == LocalPlayer and not alreadySent and not farmFinished then
+        alreadySent = true
+        sendWebhook(TARGET_IMPORTANT_WEBHOOK, "⚠️ Аккаунт отключен", "Детали", "Игрок самостоятельно покинул сервер или закрыл окно", true)
+    end
+end)
+
+if queue_on_teleport or syn then
+    pcall(function()
+        LocalPlayer.OnTeleport:Connect(function() alreadySent = true end)
+    end)
+end
+
+pcall(function()
+    CoreGui.RobloxPromptGui.promptOverlay.ChildAdded:Connect(function(child)
+        if child.Name == "ErrorPrompt" and not alreadySent and not farmFinished then
+            alreadySent = true
+            local reasonLabel = child:FindFirstChild("ErrorMessage", true)
+            if reasonLabel then
+                if reasonLabel.Text == "Label" or reasonLabel.Text == "" then reasonLabel:GetPropertyChangedSignal("Text"):Wait() end
+                local finalReason = cleanReason(reasonLabel.Text)
+                sendWebhook(TARGET_IMPORTANT_WEBHOOK, "🚨 БОТ КИКНУТ С СЕРВЕРА!", "Причина кика", finalReason, true)
+            else
+                sendWebhook(TARGET_IMPORTANT_WEBHOOK, "🚨 БОТ КИКНУТ С СЕРВЕРА!", "Причина кика", "Обычный кик / Разрыв соединения", true)
+            end
+        end
+    end)
+end)
+
+-- === СТАРТОВОЕ УВЕДОМЛЕНИЕ ===
+sendWebhook(TARGET_IMPORTANT_WEBHOOK, "Бот запущен", "Статус", "Успешно инициализирован, мониторинг активен.", false)
